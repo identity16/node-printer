@@ -14,6 +14,7 @@ NAN_MODULE_INIT(Init) {
     MY_MODULE_SET_METHOD(target, "printFile", PrintFile);
     MY_MODULE_SET_METHOD(target, "getSupportedPrintFormats", getSupportedPrintFormats);
     MY_MODULE_SET_METHOD(target, "getSupportedJobCommands", getSupportedJobCommands);
+    MY_MODULE_SET_METHOD(target, "getCutterControl_DNP", getCutterControl_DNP);
 }
 
 #if NODE_MAJOR_VERSION >= 10

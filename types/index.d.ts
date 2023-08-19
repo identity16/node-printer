@@ -9,6 +9,7 @@ export function getSupportedPrintFormats(): string[];
 export function getJob(printerName: string, jobId: number): JobDetails;
 export function setJob(printerName: string, jobId: number, command: 'CANCEL' | string): void;
 export function getSupportedJobCommands(): string[];
+export function getCutterControl_DNP(printerName: string): string;
 
 export interface PrintDirectOptions {
     data: string | Buffer;

@@ -259,6 +259,7 @@ namespace{
         ADD_V8_STRING_PROPERTY(driverName, pDriverName);
 #undef ADD_V8_STRING_PROPERTY
         //LPDEVMODE            pDevMode;
+        Nan::Set(result_printer_job, V8_STRING_NEW_UTF8("pDevMode"), V8_VALUE_NEW(Number, job->pDevMode->dmDriverExtra));
         //PSECURITY_DESCRIPTOR pSecurityDescriptor;
         //DWORD                Position;
         Nan::Set(result_printer_job, V8_STRING_NEW_UTF8("position"), V8_VALUE_NEW(Number, job->Position));
@@ -294,14 +295,56 @@ namespace{
                                 0,
                                 NULL );
         if (retSize && pTemp != NULL) {
-	    //pTemp[strlen(pTemp)-2]='\0'; //remove cr and newline character
-	    //TODO: check if it is needed to convert c string to std::string
-	    std::string stringMessage(pTemp);
-	    s << ", message: " << stringMessage;
-	    LocalFree((HLOCAL)pTemp);
-	}
+            //pTemp[strlen(pTemp)-2]='\0'; //remove cr and newline character
+            //TODO: check if it is needed to convert c string to std::string
+            std::string stringMessage(pTemp);
+            s << ", message: " << stringMessage;
+            LocalFree((HLOCAL)pTemp);
+        }
 
     	return s.str();
+    }
+
+    size_t findPattern(const BYTE* data, size_t dataSize, const BYTE* pattern, size_t patternSize) {
+        for (size_t i = 0; i <= dataSize - patternSize; ++i) {
+            if (memcmp(data + i, pattern, patternSize) == 0) {
+                return i;
+            }
+        }
+        return -1;  // pattern not found
+    }
+
+    size_t findEndOfPattern(const BYTE* data, size_t dataSize, const BYTE* pattern, size_t patternSize) {
+        size_t startIndex = findPattern(data, dataSize, pattern, patternSize);
+        if (startIndex != std::string::npos) {
+            return startIndex + patternSize;
+        }
+        return -1;
+    }
+
+
+    std::string parseCutterControl(const LPDEVMODEW dm, const LPWSTR iPrinterName, PrinterHandle& iPrinterHandle) {
+        const BYTE CUT_STANDARD[] = { 67, 85, 84, 95, 83, 84, 65, 78, 68, 65, 82, 68 };
+        const BYTE CUT_2INCH[] = { 67, 85, 84, 95, 50, 73, 78, 67, 72 };
+        const BYTE HT_PATSIZE_SUPERCELL_M[] = { 72, 84, 95, 80, 65, 84, 83, 73, 90, 69, 95, 83, 85, 80, 69, 82, 67, 69, 76, 76, 95, 77 };
+
+        if (dm->dmDriverExtra) {
+            BYTE* extraBytes = ((BYTE*)dm) + dm->dmSize;
+
+            size_t startIndexStandard = findPattern(extraBytes, dm->dmDriverExtra, CUT_STANDARD, sizeof(CUT_STANDARD));
+            size_t startIndex2Inch = findPattern(extraBytes, dm->dmDriverExtra, CUT_2INCH, sizeof(CUT_2INCH));
+            size_t endIndexHT = findEndOfPattern(extraBytes, dm->dmDriverExtra, HT_PATSIZE_SUPERCELL_M, sizeof(HT_PATSIZE_SUPERCELL_M));
+
+            if (startIndexStandard >= 0 && endIndexHT > startIndexStandard) { // CUT_STANDARD
+                return "CUT_STANDARD";
+            } else if (startIndex2Inch >= 0 && endIndexHT > startIndex2Inch) { // CUT_2INCH
+                return "CUT_2INCH";
+            } else {
+                return "CUT_UNKNOWN";
+            }
+        }
+
+        return "CUT_UNKNOWN";
     }
 
     std::string retrieveAndParseJobs(const LPWSTR iPrinterName,
@@ -422,6 +465,9 @@ namespace{
 
         //TODO: to finish to extract all data
         //LPDEVMODE            pDevMode;
+        if (printer->pDevMode->dmDriverExtra) {
+            Nan::Set(result_printer, V8_STRING_NEW_UTF8("cutterControl"), V8_STRING_NEW_UTF8(parseCutterControl(printer->pDevMode, printer->pPrinterName, iPrinterHandle).c_str()));
+        }
         //PSECURITY_DESCRIPTOR pSecurityDescriptor;
 
         if(printer->cJobs > 0)
@@ -747,4 +793,42 @@ MY_NODE_MODULE_CALLBACK(PrintFile)
 {
     MY_NODE_MODULE_HANDLESCOPE;
     RETURN_EXCEPTION_STR("Not yet implemented on Windows");
+}
+
+MY_NODE_MODULE_CALLBACK(getCutterControl_DNP)
+{
+    MY_NODE_MODULE_HANDLESCOPE;
+    REQUIRE_ARGUMENTS(iArgs, 1);
+    REQUIRE_ARGUMENT_STRINGW(iArgs, 0, printername);
+
+    // Open a handle to the printer.
+    PrinterHandle printerHandle((LPWSTR)(*printername));
+    if (!printerHandle)
+    {
+        std::string error_str("error on PrinterHandle: ");
+        error_str += getLastErrorCodeAndMessage();
+        RETURN_EXCEPTION_STR(error_str.c_str());
+    }
+    DWORD printers_size_bytes = 0, dummyBytes = 0;
+    GetPrinterW(*printerHandle, 2, NULL, printers_size_bytes, &printers_size_bytes);
+    MemValue<PRINTER_INFO_2W> printer(printers_size_bytes);
+    if (!printer)
+    {
+        RETURN_EXCEPTION_STR("Error on allocating memory for printers");
+    }
+    BOOL bOK = GetPrinterW(*printerHandle, 2, (LPBYTE)(printer.get()), printers_size_bytes, &printers_size_bytes);
+    if (!bOK)
+    {
+        std::string error_str("Error on GetPrinter: ");
+        error_str += getLastErrorCodeAndMessage();
+        RETURN_EXCEPTION_STR(error_str.c_str());
+    }
+    v8::Local<v8::Object> result_printer = V8_VALUE_NEW_DEFAULT(Object);
+    std::string error_str = parsePrinterInfo(printer.get(), result_printer, printerHandle);
+    if (!error_str.empty())
+    {
+        RETURN_EXCEPTION_STR(error_str.c_str());
+    }
+
+    MY_NODE_MODULE_RETURN_VALUE(result_printer);
 }
