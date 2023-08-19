@@ -30,10 +30,12 @@ export interface PrintFileOptions {
 export type PrintOnSuccessFunction = (jobId: string) => any;
 export type PrintOnErrorFunction = (err: Error) => any;
 
+export type PrintCutterControl = 'CUT_UNKNOWN' | 'CUT_2INCH' | 'CUT_STANDARD';
+
 export interface PrinterDetails {
     name: string;
     isDefault: boolean;
-    options: { [key: string]: string; };
+    options: { [key: string]: string; } & { cutterControl: PrintCutterControl };
 }
 
 export interface PrinterDriverOptions {
