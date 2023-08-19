@@ -84,6 +84,10 @@ MY_NODE_MODULE_CALLBACK(getSupportedPrintFormats);
  */
 MY_NODE_MODULE_CALLBACK(getSupportedJobCommands);
 
+/** getCutterControl_DNP
+*/
+MY_NODE_MODULE_CALLBACK(getCutterControl_DNP);
+
 //TODO:
 // optional ability to get printer spool
 
