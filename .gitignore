@@ -11,3 +11,4 @@ prebuilds
 .prebuildrc
 .vs
 .vscode
+.env
